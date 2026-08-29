@@ -1,25 +1,41 @@
+using ReliableTransfer.Application;
 using ReliableTransfer.Domain;
 using Npgsql;
 using Dapper;
 
 namespace ReliableTransfer.Infra;
 
-public class TransferRepository
+public class TransferRepository : ITransferRepository
 {
 	private readonly string _connectionString;
 
-	public TransferRepository(IConfiguration config)
+	public TransferRepository(string conString)
 	{
-		_connectionString = config.GetConnectionString("TransferConnection");
+		_connectionString = conString;
 	}
 
-	public async void Create(Transfer t)
+	public void Add(Transfer t)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
+		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
 			INSERT INTO Transfers
 			VALUES (@Id, @Amount, @SenderId, @ReceiverId)
+			""";
+		var rowsAffected = conn.Execute(sql, t);
+	}
+
+	public void Save(Transfer t)
+	{
+		using var conn = new NpgsqlConnection(_connectionString);
+
+		const string sql = """
+			UPDATE Transfers
+			SET Amount = @Amount,
+			SenderId = @SenderId,
+			ReceiverId = @ReceiverId,
+			Status = @Status
+			WHERE Id = @Id
 			""";
 		var rowsAffected = conn.Execute(sql, t);
 	}

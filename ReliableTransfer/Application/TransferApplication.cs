@@ -1,17 +1,24 @@
 using ReliableTransfer.Domain;
-using ReliableTransfer.Infra;
 
 namespace ReliableTransfer.Application;
 
 public class TransferApplication
 {
-	private readonly UserRepository users;
-	private readonly TransferRepository transfers;
+	private readonly IUserRepository users;
+	private readonly ITransferRepository transfers;
 
-	public TransferApplication(UserRepository userRepo, TransferRepository transferRepo)
+	public TransferApplication(IUserRepository userRepo, ITransferRepository transferRepo)
 	{
 		users = userRepo;
 		transfers = transferRepo;
+	}
+
+	public Transfer QueueTransfer(Guid senderId, Guid receiverId, decimal amount)
+	{
+		var transfer = new Transfer(senderId, receiverId, amount);
+		transfers.Add(transfer);
+
+		return transfer;
 	}
 
 	public void ProcessTransfer(Transfer transfer)

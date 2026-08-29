@@ -1,21 +1,22 @@
+using ReliableTransfer.Application;
 using ReliableTransfer.Domain;
 using Npgsql;
 using Dapper;
 
 namespace ReliableTransfer.Infra;
 
-public class UserRepository
+public class UserRepository : IUserRepository
 {
 	private readonly string _connectionString;
 
-	public UserRepository(IConfiguration config)
+	public UserRepository(string conString)
 	{
-		_connectionString = config.GetConnectionString("TransferConnection");
+		_connectionString = conString;
 	}
 
-	public async Task<User> Get(Guid id)
+	public User Get(Guid id)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
+		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
 			SELECT *
@@ -25,9 +26,9 @@ public class UserRepository
 		return conn.QuerySingle(sql, new { Id = id });
 	}
 
-	private async void Save(User user)
+	public void Save(User user)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
+		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
 			UPDATE Users
