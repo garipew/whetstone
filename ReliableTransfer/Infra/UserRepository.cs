@@ -14,7 +14,7 @@ public class UserRepository : IUserRepository
 		_connectionString = conString;
 	}
 
-	public User Get(Guid id)
+	public User Get(int id)
 	{
 		using var conn = new NpgsqlConnection(_connectionString);
 

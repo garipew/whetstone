@@ -20,7 +20,7 @@ public class TransferRepository : ITransferRepository
 
 		const string sql = """
 			INSERT INTO Transfers
-			VALUES (@Id, @Amount, @SenderId, @ReceiverId)
+			VALUES (@Amount, @SenderId, @ReceiverId, @Status)
 			""";
 		var rowsAffected = conn.Execute(sql, t);
 	}

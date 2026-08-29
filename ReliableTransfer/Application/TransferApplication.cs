@@ -13,7 +13,7 @@ public class TransferApplication
 		transfers = transferRepo;
 	}
 
-	public Transfer QueueTransfer(Guid senderId, Guid receiverId, decimal amount)
+	public Transfer QueueTransfer(int senderId, int receiverId, decimal amount)
 	{
 		var transfer = new Transfer(senderId, receiverId, amount);
 		transfers.Add(transfer);

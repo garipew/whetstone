@@ -2,12 +2,11 @@ namespace ReliableTransfer.Domain;
 
 public class User
 {
-	public Guid Id { get; set; }
+	public int Id { get; set; }
 	public decimal Balance { get; private set; }
 
 	public User()
 	{
-		Id = new Guid();
 		Balance = 0m;
 	}
 
