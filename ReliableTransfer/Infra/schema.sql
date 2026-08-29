@@ -1,11 +1,12 @@
-CREATE TABLE users {
+CREATE TABLE users (
 	Id int PRIMARY KEY,
-	Balance decimal,
-}
+	Balance decimal
+);
 
-CREATE TABLE transfers {
+CREATE TABLE transfers (
 	Id int PRIMARY KEY,
-	Balance decimal,
+	Amount decimal,
 	SenderId int FOREIGN KEY,
 	ReceiverId int FOREIGN KEY,
-}
+	Status string
+);
