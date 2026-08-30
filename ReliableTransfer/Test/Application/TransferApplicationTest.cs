@@ -17,9 +17,9 @@ public class TransferApplicationTest : IAsyncLifetime
             .WithPassword("test")
             .Build();
 
-    private UserRepository users;
-    private TransferRepository transfers;
-    private TransferApplication sut;
+    private UserRepository users = null!;
+    private TransferRepository transfers = null!;
+    private TransferApplication sut = null!;
 
     public async Task InitializeAsync()
     {
@@ -51,8 +51,8 @@ public class TransferApplicationTest : IAsyncLifetime
     {
 	    var user = new User();
 	    user.Credit(amount);
-	    var id = await users.Add(user);
-	    return await users.Get(id);
+	    await users.Add(user);
+	    return (await users.Get(user.Id))!;
     }
 
     [Fact]
@@ -67,8 +67,8 @@ public class TransferApplicationTest : IAsyncLifetime
 
 	Assert.Equal(t1.Id, t2.Id);
 
-	sender = await users.Get(t1.SenderId);
-	receiver = await users.Get(t1.ReceiverId);
+	sender = (await users.Get(t1.SenderId))!;
+	receiver = (await users.Get(t1.ReceiverId))!;
 
 	Assert.Equal(21m, sender.Balance);
 	Assert.Equal(63m, receiver.Balance);
