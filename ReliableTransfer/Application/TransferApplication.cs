@@ -13,22 +13,27 @@ public class TransferApplication
 		transfers = transferRepo;
 	}
 
-	public void ProcessTransfer(int senderId, int receiverId, decimal amount)
+	public async Task<Transfer> ProcessTransfer(Guid idempotency, int senderId, int receiverId, decimal amount)
 	{
-		var transfer = new Transfer(senderId, receiverId, amount);
-		transfers.Add(transfer);
+		Transfer? transfer = transfers.GetByIdempotency(idempotency);
+		if (transfer != null) {
+			return transfer;
+		}
+		transfer = new Transfer(senderId, receiverId, amount);
+		transfers.Add(idempotency, transfer);
 
-		var sender = users.Get(transfer.SenderId);
-		var receiver = users.Get(transfer.ReceiverId);
+		var sender = await users.Get(transfer.SenderId);
+		var receiver = await users.Get(transfer.ReceiverId);
 
 		sender.Debit(transfer.Amount);
 		receiver.Credit(transfer.Amount);
 
 		transfer.Complete();
 
-		users.Save(sender);
-		users.Save(receiver);
+		await users.Save(sender);
+		await users.Save(receiver);
 
 		transfers.Save(transfer);
+		return transfer;
 	}
 }
