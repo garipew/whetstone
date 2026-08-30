@@ -14,15 +14,33 @@ public class TransferRepository : ITransferRepository
 		_connectionString = conString;
 	}
 
-	public void Add(Transfer t)
+	public Transfer? GetByIdempotency(Guid idempotency)
+	{
+		using var conn = new NpgsqlConnection(_connectionString);
+		const string sql = """
+			SELECT Id, SenderId, ReceiverId, Amount
+			FROM transfers
+			WHERE IdempotencyKey = @Idempotency
+			""";
+		return conn.QueryFirstOrDefault<Transfer>(sql, new { Idempotency = idempotency });
+	}
+
+	public void Add(Guid idempotency, Transfer t)
 	{
 		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
-			INSERT INTO Transfers
-			VALUES (@Amount, @SenderId, @ReceiverId, @Status)
+			INSERT INTO transfers (IdempotencyKey, Amount, SenderId, ReceiverId, Status)
+			VALUES (@IdempotencyKey, @Amount, @SenderId, @ReceiverId, @Status)
+			RETURNING Id
 			""";
-		var rowsAffected = conn.Execute(sql, t);
+		t.Id = conn.ExecuteScalar<int>(sql, new {
+				IdempotencyKey = idempotency,
+				Amount = t.Amount,
+				SenderId = t.SenderId,
+				ReceiverId = t.ReceiverId,
+				Status = t.Status
+				});
 	}
 
 	public void Save(Transfer t)
@@ -30,7 +48,7 @@ public class TransferRepository : ITransferRepository
 		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
-			UPDATE Transfers
+			UPDATE transfers
 			SET Amount = @Amount,
 			SenderId = @SenderId,
 			ReceiverId = @ReceiverId,

@@ -5,6 +5,7 @@ CREATE TABLE users (
 
 CREATE TABLE transfers (
 	Id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	IdempotencyKey UUID UNIQUE NOT NULL,
 	Amount decimal NOT NULL CHECK (Amount > 0),
 	SenderId int NOT NULL REFERENCES users(Id),
 	ReceiverId int NOT NULL REFERENCES users(Id),
