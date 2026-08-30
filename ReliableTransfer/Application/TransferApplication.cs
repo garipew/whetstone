@@ -15,12 +15,12 @@ public class TransferApplication
 
 	public async Task<Transfer> ProcessTransfer(Guid idempotency, int senderId, int receiverId, decimal amount)
 	{
-		Transfer? transfer = transfers.GetByIdempotency(idempotency);
+		Transfer? transfer = await transfers.GetByIdempotency(idempotency);
 		if (transfer != null) {
 			return transfer;
 		}
 		transfer = new Transfer(senderId, receiverId, amount);
-		transfers.Add(idempotency, transfer);
+		await transfers.Add(idempotency, transfer);
 
 		var sender = await users.Get(transfer.SenderId);
 		var receiver = await users.Get(transfer.ReceiverId);
@@ -33,7 +33,7 @@ public class TransferApplication
 		await users.Save(sender);
 		await users.Save(receiver);
 
-		transfers.Save(transfer);
+		await transfers.Save(transfer);
 		return transfer;
 	}
 }
