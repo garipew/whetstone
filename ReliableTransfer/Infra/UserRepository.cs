@@ -14,24 +14,47 @@ public class UserRepository : IUserRepository
 		_connectionString = conString;
 	}
 
-	public User Get(int id)
+	public async Task<List<User>> GetAll()
 	{
 		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
 			SELECT *
-			FROM Users
-			WHERE Id = @Id
+			FROM users
 			""";
-		return conn.QuerySingle(sql, new { Id = id });
+		return conn.Query<User>(sql).ToList();
 	}
 
-	public void Save(User user)
+	public async Task<User> Get(int id)
 	{
 		using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
-			UPDATE Users
+			SELECT *
+			FROM users
+			WHERE Id = @Id
+			""";
+		return conn.QuerySingle<User>(sql, new { Id = id });
+	}
+
+	public async Task<int> Add(User user)
+	{
+		using var conn = new NpgsqlConnection(_connectionString);
+
+		const string sql = """
+			INSERT INTO users (Balance)
+			VALUES (@Balance)
+			RETURNING Id;
+			""";
+		return await conn.ExecuteScalarAsync<int>(sql, user);
+	}
+
+	public async Task Save(User user)
+	{
+		using var conn = new NpgsqlConnection(_connectionString);
+
+		const string sql = """
+			UPDATE users
 			SET Balance = @Balance
 			WHERE Id = @Id
 			""";
