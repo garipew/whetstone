@@ -14,27 +14,27 @@ public class TransferRepository : ITransferRepository
 		_connectionString = conString;
 	}
 
-	public Transfer? GetByIdempotency(Guid idempotency)
+	public async Task<Transfer?> GetByIdempotency(Guid idempotency)
 	{
-		using var conn = new NpgsqlConnection(_connectionString);
+		await using var conn = new NpgsqlConnection(_connectionString);
 		const string sql = """
 			SELECT Id, SenderId, ReceiverId, Amount
 			FROM transfers
 			WHERE IdempotencyKey = @Idempotency
 			""";
-		return conn.QueryFirstOrDefault<Transfer>(sql, new { Idempotency = idempotency });
+		return await conn.QueryFirstOrDefaultAsync<Transfer>(sql, new { Idempotency = idempotency });
 	}
 
-	public void Add(Guid idempotency, Transfer t)
+	public async Task Add(Guid idempotency, Transfer t)
 	{
-		using var conn = new NpgsqlConnection(_connectionString);
+		await using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
 			INSERT INTO transfers (IdempotencyKey, Amount, SenderId, ReceiverId, Status)
 			VALUES (@IdempotencyKey, @Amount, @SenderId, @ReceiverId, @Status)
 			RETURNING Id
 			""";
-		t.Id = conn.ExecuteScalar<int>(sql, new {
+		t.Id = await conn.ExecuteScalarAsync<int>(sql, new {
 				IdempotencyKey = idempotency,
 				Amount = t.Amount,
 				SenderId = t.SenderId,
@@ -43,9 +43,9 @@ public class TransferRepository : ITransferRepository
 				});
 	}
 
-	public void Save(Transfer t)
+	public async Task Save(Transfer t)
 	{
-		using var conn = new NpgsqlConnection(_connectionString);
+		await using var conn = new NpgsqlConnection(_connectionString);
 
 		const string sql = """
 			UPDATE transfers
@@ -55,6 +55,7 @@ public class TransferRepository : ITransferRepository
 			Status = @Status
 			WHERE Id = @Id
 			""";
-		var rowsAffected = conn.Execute(sql, t);
+
+		await conn.ExecuteAsync(sql, t);
 	}
 }
