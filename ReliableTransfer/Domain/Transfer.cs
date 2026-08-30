@@ -18,6 +18,15 @@ public class Transfer
 		Status = "pending";
 	}
 
+	public Transfer(int id, int senderId, int receiverId, decimal amount)
+	{
+		Id = id;
+		Amount = amount;
+		SenderId = senderId;
+		ReceiverId = receiverId;
+		Status = "pending";
+	}
+
 	public void Complete()
 	{
 		Status = "complete";
