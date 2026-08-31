@@ -56,7 +56,7 @@ public class TransferApplicationTest : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessTransfer_ShouldProcessSameTransferOnlyOnce()
+    public async Task ProcessTransfer_ShouldNotReprocessCompleteTransfer()
     {
 	var sender = await CreateUser(42m);
 	var receiver = await CreateUser(42m);
@@ -69,6 +69,27 @@ public class TransferApplicationTest : IAsyncLifetime
 
 	sender = (await users.Get(t1.SenderId))!;
 	receiver = (await users.Get(t1.ReceiverId))!;
+
+	Assert.Equal(21m, sender.Balance);
+	Assert.Equal(63m, receiver.Balance);
+    }
+
+    [Fact]
+    public async Task ProcessTransfer_ShouldProcessTransferOnlyOnce()
+    {
+	var sender = await CreateUser(42m);
+	var receiver = await CreateUser(42m);
+
+	var idempotency = Guid.NewGuid();
+	var t1 = sut.ProcessTransfer(idempotency, sender.Id, receiver.Id, 21m);
+	var t2 = sut.ProcessTransfer(idempotency, sender.Id, receiver.Id, 21m);
+
+	var transfers = await Task.WhenAll(t1, t2);
+
+	Assert.Equal(transfers[0].Id, transfers[1].Id);
+
+	sender = (await users.Get(transfers[0].SenderId))!;
+	receiver = (await users.Get(transfers[0].ReceiverId))!;
 
 	Assert.Equal(21m, sender.Balance);
 	Assert.Equal(63m, receiver.Balance);
