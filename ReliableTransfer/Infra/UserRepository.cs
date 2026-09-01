@@ -1,40 +1,50 @@
+using System.Data.Common;
 using ReliableTransfer.Domain;
 using Npgsql;
 using Dapper;
 
 namespace ReliableTransfer.Infra;
 
-public class UserRepository
+public class UserRepository : IUserRepository
 {
 	private readonly string _connectionString;
 
-	public UserRepository(IConfiguration config)
+	public UserRepository(string conString)
 	{
-		_connectionString = config.GetConnectionString("TransferConnection");
+		_connectionString = conString;
 	}
 
-	public async Task<User> Get(Guid id)
+	public async Task<User?> Get(DbTransaction tx, int id)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
 			SELECT *
-			FROM Users
+			FROM users
 			WHERE Id = @Id
 			""";
-		return conn.QuerySingle(sql, new { Id = id });
+		return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, tx);
 	}
 
-	private async void Save(User user)
+	public async Task Add(DbTransaction tx, User user)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
-			UPDATE Users
+			INSERT INTO users (Balance)
+			VALUES (@Balance)
+			RETURNING Id;
+			""";
+		user.Id = await db.ExecuteScalarAsync<int>(sql, user, tx);
+	}
+
+	public async Task Save(DbTransaction tx, User user)
+	{
+		var db = tx.Connection;
+		const string sql = """
+			UPDATE users
 			SET Balance = @Balance
 			WHERE Id = @Id
 			""";
 
-		conn.Execute(sql, user);
+		await db.ExecuteAsync(sql, user, tx);
 	}
 }

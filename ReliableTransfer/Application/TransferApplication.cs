@@ -1,32 +1,61 @@
+using System.Data.Common;
 using ReliableTransfer.Domain;
-using ReliableTransfer.Infra;
 
 namespace ReliableTransfer.Application;
 
 public class TransferApplication
 {
-	private readonly UserRepository users;
-	private readonly TransferRepository transfers;
+	private readonly IUserRepository users;
+	private readonly ITransferRepository transfers;
 
-	public TransferApplication(UserRepository userRepo, TransferRepository transferRepo)
+	public TransferApplication(IUserRepository userRepo, ITransferRepository transferRepo)
 	{
 		users = userRepo;
 		transfers = transferRepo;
 	}
 
-	public void ProcessTransfer(Transfer transfer)
+	public async Task<Transfer> ProcessTransfer(DbConnection db, Guid idempotency, int senderId, int receiverId, decimal amount)
 	{
-		var sender = users.Get(transfer.SenderId);
-		var receiver = users.Get(transfer.ReceiverId);
+		await using var tx = await db.BeginTransactionAsync();
+		try {
+			Transfer? transfer = await transfers.GetByIdempotency(tx, idempotency);
+			if (transfer != null) {
+				return transfer;
+			}
 
-		sender.Debit(transfer.Amount);
-		receiver.Credit(transfer.Amount);
+			var sender = await users.Get(tx, senderId);
+			var receiver = await users.Get(tx, receiverId);
 
-		transfer.Complete();
+			if (sender is null || receiver is null) {
+				throw new InvalidOperationException("User not found");
+			}
 
-		users.Save(sender);
-		users.Save(receiver);
+			transfer = new Transfer(senderId, receiverId, amount);
+			if (!transfer.Validate()) {
+				throw new InvalidOperationException("Transfer not valid");
+			}
+			await transfers.Add(tx, idempotency, transfer);
 
-		transfers.Save(transfer);
+			sender.Debit(transfer.Amount);
+			receiver.Credit(transfer.Amount);
+
+			transfer.Complete();
+
+			await users.Save(tx, sender);
+			await users.Save(tx, receiver);
+
+			await transfers.Save(tx, transfer);
+			await tx.CommitAsync();
+			return transfer;
+		} catch (TransferConflictException) {
+			await tx.RollbackAsync();
+			await using var ttx = await db.BeginTransactionAsync();
+			var existing = (await transfers.GetByIdempotency(ttx, idempotency))!;
+			await ttx.CommitAsync();
+			return existing;
+		} catch {
+			await tx.RollbackAsync();
+			throw;
+		}
 	}
 }
