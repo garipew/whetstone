@@ -33,13 +33,17 @@ public class TransferRepository : ITransferRepository
 			VALUES (@IdempotencyKey, @Amount, @SenderId, @ReceiverId, @Status)
 			RETURNING Id
 			""";
-		t.Id = await conn.ExecuteScalarAsync<int>(sql, new {
-				IdempotencyKey = idempotency,
-				Amount = t.Amount,
-				SenderId = t.SenderId,
-				ReceiverId = t.ReceiverId,
-				Status = t.Status
-				});
+		try {
+			t.Id = await conn.ExecuteScalarAsync<int>(sql, new {
+					IdempotencyKey = idempotency,
+					Amount = t.Amount,
+					SenderId = t.SenderId,
+					ReceiverId = t.ReceiverId,
+					Status = t.Status
+					});
+		} catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation) {
+			throw new TransferConflictException();
+		}
 	}
 
 	public async Task Save(Transfer t)
