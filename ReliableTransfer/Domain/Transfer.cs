@@ -27,6 +27,11 @@ public class Transfer
 		Status = "pending";
 	}
 
+	public bool Validate()
+	{
+		return Amount > 0 && SenderId != ReceiverId;
+	}
+
 	public void Complete()
 	{
 		Status = "complete";
