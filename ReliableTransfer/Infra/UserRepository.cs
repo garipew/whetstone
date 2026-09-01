@@ -1,4 +1,3 @@
-using ReliableTransfer.Application;
 using ReliableTransfer.Domain;
 using Npgsql;
 using Dapper;

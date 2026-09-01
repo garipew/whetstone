@@ -1,6 +1,4 @@
-using ReliableTransfer.Domain;
-
-namespace ReliableTransfer.Application;
+namespace ReliableTransfer.Domain;
 
 public interface ITransferRepository
 {
