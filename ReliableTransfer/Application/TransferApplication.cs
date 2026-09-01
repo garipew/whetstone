@@ -19,21 +19,33 @@ public class TransferApplication
 		if (transfer != null) {
 			return transfer;
 		}
-		transfer = new Transfer(senderId, receiverId, amount);
-		await transfers.Add(idempotency, transfer);
 
-		var sender = await users.Get(transfer.SenderId);
-		var receiver = await users.Get(transfer.ReceiverId);
+		var sender = await users.Get(senderId);
+		var receiver = await users.Get(receiverId);
 
-		sender.Debit(transfer.Amount);
-		receiver.Credit(transfer.Amount);
+		if (sender is null || receiver is null) {
+			throw new InvalidOperationException("User not found");
+		}
 
-		transfer.Complete();
+		try {
+			transfer = new Transfer(senderId, receiverId, amount);
+			if (!transfer.Validate()) {
+				throw new InvalidOperationException("Transfer not valid");
+			}
+			await transfers.Add(idempotency, transfer);
 
-		await users.Save(sender);
-		await users.Save(receiver);
+			sender.Debit(transfer.Amount);
+			receiver.Credit(transfer.Amount);
 
-		await transfers.Save(transfer);
-		return transfer;
+			transfer.Complete();
+
+			await users.Save(sender);
+			await users.Save(receiver);
+
+			await transfers.Save(transfer);
+			return transfer;
+		} catch (TransferConflictException) {
+			return (await transfers.GetByIdempotency(idempotency))!;
+		}
 	}
 }
