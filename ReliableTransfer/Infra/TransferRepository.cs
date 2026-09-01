@@ -1,3 +1,4 @@
+using System.Data.Common;
 using ReliableTransfer.Domain;
 using Npgsql;
 using Dapper;
@@ -13,43 +14,41 @@ public class TransferRepository : ITransferRepository
 		_connectionString = conString;
 	}
 
-	public async Task<Transfer?> GetByIdempotency(Guid idempotency)
+	public async Task<Transfer?> GetByIdempotency(DbTransaction tx, Guid idempotency)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
+		var db = tx.Connection;
 		const string sql = """
 			SELECT Id, SenderId, ReceiverId, Amount
 			FROM transfers
 			WHERE IdempotencyKey = @Idempotency
 			""";
-		return await conn.QueryFirstOrDefaultAsync<Transfer>(sql, new { Idempotency = idempotency });
+		return await db.QueryFirstOrDefaultAsync<Transfer>(sql, new { Idempotency = idempotency }, tx);
 	}
 
-	public async Task Add(Guid idempotency, Transfer t)
+	public async Task Add(DbTransaction tx, Guid idempotency, Transfer t)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
 			INSERT INTO transfers (IdempotencyKey, Amount, SenderId, ReceiverId, Status)
 			VALUES (@IdempotencyKey, @Amount, @SenderId, @ReceiverId, @Status)
 			RETURNING Id
 			""";
 		try {
-			t.Id = await conn.ExecuteScalarAsync<int>(sql, new {
+			t.Id = await db.ExecuteScalarAsync<int>(sql, new {
 					IdempotencyKey = idempotency,
 					Amount = t.Amount,
 					SenderId = t.SenderId,
 					ReceiverId = t.ReceiverId,
 					Status = t.Status
-					});
+					}, tx);
 		} catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation) {
 			throw new TransferConflictException();
 		}
 	}
 
-	public async Task Save(Transfer t)
+	public async Task Save(DbTransaction tx, Transfer t)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
 			UPDATE transfers
 			SET Amount = @Amount,
@@ -59,6 +58,6 @@ public class TransferRepository : ITransferRepository
 			WHERE Id = @Id
 			""";
 
-		await conn.ExecuteAsync(sql, t);
+		await db.ExecuteAsync(sql, t, tx);
 	}
 }

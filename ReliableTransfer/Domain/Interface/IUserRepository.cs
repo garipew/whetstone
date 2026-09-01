@@ -1,8 +1,10 @@
+using System.Data.Common;
+
 namespace ReliableTransfer.Domain;
 
 public interface IUserRepository
 {
-	public Task<User?> Get(int id);
-	public Task Add(User user);
-	public Task Save(User user);
+	public Task<User?> Get(DbTransaction tx, int id);
+	public Task Add(DbTransaction tx, User user);
+	public Task Save(DbTransaction tx, User user);
 }

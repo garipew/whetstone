@@ -1,3 +1,4 @@
+using System.Data.Common;
 using ReliableTransfer.Domain;
 using Npgsql;
 using Dapper;
@@ -13,40 +14,37 @@ public class UserRepository : IUserRepository
 		_connectionString = conString;
 	}
 
-	public async Task<User?> Get(int id)
+	public async Task<User?> Get(DbTransaction tx, int id)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
 			SELECT *
 			FROM users
 			WHERE Id = @Id
 			""";
-		return await conn.QueryFirstOrDefaultAsync<User>(sql, new { Id = id });
+		return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, tx);
 	}
 
-	public async Task Add(User user)
+	public async Task Add(DbTransaction tx, User user)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
 			INSERT INTO users (Balance)
 			VALUES (@Balance)
 			RETURNING Id;
 			""";
-		user.Id = await conn.ExecuteScalarAsync<int>(sql, user);
+		user.Id = await db.ExecuteScalarAsync<int>(sql, user, tx);
 	}
 
-	public async Task Save(User user)
+	public async Task Save(DbTransaction tx, User user)
 	{
-		await using var conn = new NpgsqlConnection(_connectionString);
-
+		var db = tx.Connection;
 		const string sql = """
 			UPDATE users
 			SET Balance = @Balance
 			WHERE Id = @Id
 			""";
 
-		await conn.ExecuteAsync(sql, user);
+		await db.ExecuteAsync(sql, user, tx);
 	}
 }
