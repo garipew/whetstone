@@ -1,4 +1,5 @@
 using System;
+using System.Data.Common;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -10,89 +11,110 @@ namespace ReliableTransfer.Test;
 
 public class TransferApplicationTest : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db =
-        new PostgreSqlBuilder("postgres:16-alpine")
-            .WithDatabase("testdb")
-            .WithUsername("test")
-            .WithPassword("test")
-            .Build();
+	private readonly PostgreSqlContainer _db =
+		new PostgreSqlBuilder("postgres:16-alpine")
+		.WithDatabase("testdb")
+		.WithUsername("test")
+		.WithPassword("test")
+		.Build();
 
-    private UserRepository users = null!;
-    private TransferRepository transfers = null!;
-    private TransferApplication sut = null!;
+	private UserRepository users = null!;
+	private TransferRepository transfers = null!;
+	private TransferApplication sut = null!;
 
-    public async Task InitializeAsync()
-    {
-	    await _db.StartAsync();
+	public async Task InitializeAsync()
+	{
+		await _db.StartAsync();
 
-	    var sql = await File.ReadAllTextAsync(
-			    Path.Combine(AppContext.BaseDirectory, "../../../../Infra/schema.pgsql"));
+		var sql = await File.ReadAllTextAsync(
+				Path.Combine(AppContext.BaseDirectory, "../../../../Infra/schema.pgsql"));
 
-	    var connString = _db.GetConnectionString();
-	    await using var conn = new NpgsqlConnection(connString);
+		var connString = _db.GetConnectionString();
+		await using var conn = new NpgsqlConnection(connString);
 
-	    await conn.OpenAsync();
+		await conn.OpenAsync();
 
-	    await using var command = new NpgsqlCommand(sql, conn);
-	    await command.ExecuteNonQueryAsync();
+		await using var command = new NpgsqlCommand(sql, conn);
+		await command.ExecuteNonQueryAsync();
 
-	    users = new UserRepository(connString);
-	    transfers = new TransferRepository(connString);
+		users = new UserRepository(connString);
+		transfers = new TransferRepository(connString);
 
-	    sut = new TransferApplication(users, transfers);
-    }
+		sut = new TransferApplication(users, transfers);
+	}
 
-    public async Task DisposeAsync()
-    {
-	    await _db.DisposeAsync();
-    }
+	public async Task DisposeAsync()
+	{
+		await _db.DisposeAsync();
+	}
 
-    private async Task<User> CreateUser(decimal amount)
-    {
-	    var user = new User();
-	    user.Credit(amount);
-	    await users.Add(user);
-	    return (await users.Get(user.Id))!;
-    }
+	private async Task<User> CreateUser(DbConnection con, decimal amount)
+	{
+		await using var tx = await con.BeginTransactionAsync();
+		var user = new User();
+		user.Credit(amount);
+		await users.Add(tx, user);
+		user = (await users.Get(tx, user.Id))!;
+		await tx.CommitAsync();
+		return user;
+	}
 
-    [Fact]
-    public async Task ProcessTransfer_ShouldNotReprocessCompleteTransfer()
-    {
-	var sender = await CreateUser(42m);
-	var receiver = await CreateUser(42m);
+	[Fact]
+	public async Task ProcessTransfer_ShouldNotReprocessCompleteTransfer()
+	{
+		var connString = _db.GetConnectionString();
+		await using var conn = new NpgsqlConnection(connString);
 
-	var idempotency = Guid.NewGuid();
-	var t1 = await sut.ProcessTransfer(idempotency, sender.Id, receiver.Id, 21m);
-	var t2 = await sut.ProcessTransfer(idempotency, sender.Id, receiver.Id, 21m);
+		await conn.OpenAsync();
+		var sender = await CreateUser(conn, 42m);
+		var receiver = await CreateUser(conn, 42m);
 
-	Assert.Equal(t1.Id, t2.Id);
+		await using var other = new NpgsqlConnection(connString);
+		await other.OpenAsync();
 
-	sender = (await users.Get(t1.SenderId))!;
-	receiver = (await users.Get(t1.ReceiverId))!;
+		var idempotency = Guid.NewGuid();
+		var t1 = await sut.ProcessTransfer(conn, idempotency, sender.Id, receiver.Id, 21m);
+		var t2 = await sut.ProcessTransfer(other, idempotency, sender.Id, receiver.Id, 21m);
 
-	Assert.Equal(21m, sender.Balance);
-	Assert.Equal(63m, receiver.Balance);
-    }
+		Assert.Equal(t1.Id, t2.Id);
 
-    [Fact]
-    public async Task ProcessTransfer_ShouldProcessTransferOnlyOnce()
-    {
-	var sender = await CreateUser(42m);
-	var receiver = await CreateUser(42m);
+		using var tx = await other.BeginTransactionAsync();
+		sender = (await users.Get(tx, t1.SenderId))!;
+		receiver = (await users.Get(tx, t1.ReceiverId))!;
+		await tx.CommitAsync();
 
-	var idempotency = Guid.NewGuid();
-	var t1 = sut.ProcessTransfer(idempotency, sender.Id, receiver.Id, 21m);
-	var t2 = sut.ProcessTransfer(idempotency, sender.Id, receiver.Id, 21m);
+		Assert.Equal(21m, sender.Balance);
+		Assert.Equal(63m, receiver.Balance);
+	}
 
-	var transfers = await Task.WhenAll(t1, t2);
+	[Fact]
+	public async Task ProcessTransfer_ShouldProcessTransferOnlyOnce()
+	{
+		var connString = _db.GetConnectionString();
+		await using var conn = new NpgsqlConnection(connString);
 
-	Assert.Equal(transfers[0].Id, transfers[1].Id);
+		await conn.OpenAsync();
+		var sender = await CreateUser(conn, 42m);
+		var receiver = await CreateUser(conn, 42m);
 
-	sender = (await users.Get(transfers[0].SenderId))!;
-	receiver = (await users.Get(transfers[0].ReceiverId))!;
+		await using var other = new NpgsqlConnection(connString);
+		await other.OpenAsync();
 
-	Assert.Equal(21m, sender.Balance);
-	Assert.Equal(63m, receiver.Balance);
-    }
+		var idempotency = Guid.NewGuid();
+		var t1 = sut.ProcessTransfer(conn, idempotency, sender.Id, receiver.Id, 21m);
+		var t2 = sut.ProcessTransfer(other, idempotency, sender.Id, receiver.Id, 21m);
+
+		var transfers = await Task.WhenAll(t1, t2);
+
+		Assert.Equal(transfers[0].Id, transfers[1].Id);
+
+		using var tx = await other.BeginTransactionAsync();
+		sender = (await users.Get(tx, transfers[0].SenderId))!;
+		receiver = (await users.Get(tx, transfers[0].ReceiverId))!;
+		await tx.CommitAsync();
+
+		Assert.Equal(21m, sender.Balance);
+		Assert.Equal(63m, receiver.Balance);
+	}
 }
 
